@@ -2,35 +2,38 @@
 //public information for avalon game
 //game options
 //game necessary count / set
-var turn = 0;
-var vote_turn = 0;
-var success_time = 0;
-var fail_time = 0;
-var vote_success = 0;
-var vote_fail = 0;
+var turn = 0; //mission turn
+var success_time = 0; //total success time
+var fail_time = 0; //total fail time
+var vote_turn = 0; //voting turn
+var vote_success = 0; //number of agreement
+var vote_fail = 0; //number of disagreement
 
 //for characters setting
-var max_good = 0;
-var max_evil = 0;
-var good_evil_count = [[3,2],[4,2],[4,3],[5,3],[6,3],[6,4]];
-var good_characters = [];
-var evil_characters = [];
-var all_characters = [];
+var max_good = 0; //maximum number of good characters
+var max_evil = 0; //maximum number of evil characters
+var good_evil_count = [[3,2],[4,2],[4,3],[5,3],[6,3],[6,4]]; //rule
+var good_characters = []; //all good characters 
+var evil_characters = []; //all evil characters
+var all_characters = []; //all characters
 
 //for mission sending (number of ppl of team & the 4th mission need 2 fail or not)
-var team_assignment = [[[2,3,2,3,3],false],[[2,3,4,3,4],false],[[2,3,3,4,4],true],[[3,4,4,5,5],true],[[3,4,4,5,5],true],[[3,4,4,5,5],true]];
-var team_members = [];
+var team_assignment = [[[2,3,2,3,3],false],[[2,3,4,3,4],false],[[2,3,3,4,4],true],[[3,4,4,5,5],true],[[3,4,4,5,5],true],[[3,4,4,5,5],true]]; //rule
+var team_members = []; //team members to do the mission
 
 //game states
 var states = ["wait","randomCharacters","sendMission","vote","mission",
-"missionSuccess","missionFail","update","findMerlin","evilWin","goodWin"];
-var state = states[0];
+"missionSuccess","missionFail","update","findMerlin","evilWin","goodWin"]; //all states needed
+var state = states[0]; //initial states
 
 //player information
-var player_data = []; //id, name, role, ready
+var player_data = []; //id, name, role[special character, evil/good], ready
 var player_id = 0; //for creating unique id
-var room_owner_id = null;
-var leader_id = null;
+var room_owner_id = null; //room owner
+var leader_id = null; //leader to choose members
+
+//for debug
+var show_emit = false;
 //----------------------------------------------------------------------//
 
 
@@ -48,14 +51,11 @@ io.set('log level', 1);
 
 
 
-
-
-
-
 //----------------------------------------------------------------------//
 //gameplay programming here!!
 //WebSocket连接监听
 io.on('connection', function (socket) {
+  if(show_emit) console.log('emit socket open (one client)');
   socket.emit('open');//通知客户端已连接 //只傳給一個
 
   // 打印握手信息
@@ -72,56 +72,26 @@ io.on('connection', function (socket) {
 //--------------All states are different--------------//
   socket.on('player', function(json){
 
+    console.log("state : "+state);
     switch(state){
       case "wait":
-
         if(json.type=='setName'){
           //player login
-          var obj = {time:getTime(),color:client.color};
-
           if(player_data.length>=0&&player_data.length<10){
-
-            if(room_owner_id==null) room_owner_id = player_id;
-            //tell client they are join
-            socket.emit('system',{state:state,type:'join',author:'System',value:true,player_id:player_id,room_owner_id:room_owner_id});
-         
-            client.name = json.name;
-            obj['text']=client.name;
-            obj['author']='System';
-            obj['type']='welcome';
-            obj['state']=state;    
-
-
-            //add this player into player data
-            var one_player_data = {id:player_id,name:client.name,role:null,ready:false,vote:null}; //id & name & character & ready
-            client.id = one_player_data['id'];
-            client.index = player_data.length;
-            player_data.push(one_player_data);
-            player_id ++;
-            console.log(client.name + " id="+one_player_data['id']);
-
-            //返回欢迎语
-            socket.emit('system',obj);
-            //广播新用户已登陆
-            socket.broadcast.emit('system',obj);
-
-            if(player_data.length>=5){
-              socket.emit('system',{state:state,type:'ready',author:'System'});
-              socket.broadcast.emit('system',{state:state,type:'ready',author:'System'});
-            }
-
-
+            //insert player into player_data
+            insertPlayerData(json.name);
+            console.log("player "+client.name+" ("+client.id+") login");
             //update player list
             updatePlayerList();
             //update ready state
             updateAllReadyState();
-          }
-          else{
+
+          }else{
+            console.log("player login failed (server is full)");
             //the server is full!
+            var obj = {state:state, type:'full'};
             obj['text']='Sorry, the server is full';
-            obj['author']='System';
-            obj['type']='full';
-            obj['state']=state;
+            if(show_emit) console.log("emit server full (one client)");
             socket.emit('system',obj);
             //update player list
             updatePlayerList();
@@ -130,33 +100,18 @@ io.on('connection', function (socket) {
             
           }
         }else if(json.type=='readyButton'){
+          console.log(client.name+" ("+client.id+") ready");
           //client press ready or not yet
-          client_state = json.value;
-          var obj={time:getTime(),color:client.color};
-          obj['author']='System';
-          obj['type']='ready';
-          obj['state']=state;
-          console.log(client.name +" " + client_state);
-          if(client_state=='ready'){
-            for(i=0;i<player_data.length;i++){
-              if(client.id==player_data[i]['id'])
-                player_data[i]['ready']=true;
-            }
-          }else if(client_state=='notyet'){
-            for(i=0;i<player_data.length;i++){
-              if(client.id==player_data[i]['id'])
-                player_data[i]['ready']=false;
-            }
-          }
+          updateReadyState(json.value);
           //update player list
           updatePlayerList();
           //update ready state
           updateAllReadyState();
         }else if(json.type=='playButton'){
+          console.log(client.name+ " ("+client.id+")(room owner) press start game");
           //room owner press play!
-          state = states[1];
           //tell client to change state
-          changeState();
+          changeState(states[1]);
           setGoodEvil();
           askCharactersSet();
         }
@@ -166,18 +121,12 @@ io.on('connection', function (socket) {
         if(json.type=='ready'){
           good_characters = json.good_characters;
           evil_characters = json.evil_characters;
-          console.log('done characters choosing');
-          //console.log(good_characters);
-          //console.log(evil_characters);
+          console.log(client.name + ' ('+client.id+')(room owner) done characters choosing');
 
           //random characters to players
           randomSetCharacters();
-          console.log(good_characters);
-          console.log(evil_characters);
-          console.log(all_characters);
           
-          state = states[2];
-          changeState();
+          changeState(states[2]);
 
           setLeader();
           //update player list
@@ -188,31 +137,32 @@ io.on('connection', function (socket) {
       case "sendMission":
         if(json.type=='ready'){
           team_members = json.team_members;
-          console.log('done team members choosing');
-          console.log(team_members);
-          console.log(vote_turn);
+          console.log(client.name+' ('+client.id+')done team members choosing');
 
           resetVote();
           if(vote_turn==4){
-            state = states[4];
+            //no need to vote
+            console.log("5th team members setting, no need to vote");
             vote_turn = 0;
-            changeState();
+            changeState(states[4]);
             missionVote();
             updatePlayerList();
           }else{
-            state = states[3];
+            console.log("voting for team members");
+            changeState(states[3]);
             voting();
           }
         }
         break;
       case "vote":
           if(json.type=='vote'){
-            console.log(client.id +" : "+ json.value);
+            console.log("(vote)"+client.name+" ("+client.id +") : "+ json.value);
             updateVote(json.value);
           }
         break;
       case "mission":
           if(json.type=='vote'){
+            console.log("(mission)"+client.name+" ("+client.id +") : "+ json.value);
             updateMissionVote(json.value);
           }
         break;
@@ -224,27 +174,27 @@ io.on('connection', function (socket) {
         break;
       case "findMerlin":
         if(json.type=='find'){
+          console.log(client.name+' ('+client.id + ") think " + json.value + " is Merlin");
           var find=false;
-          console.log("id is "+json.value);
-          for(i=0;i<player_data.length;i++){
-            console.log(player_data[i]['role'][0]);
-            if(player_data[i]['id']==json.value && player_data[i]['role'][0]=="Merlin"){
-              //evil win
-              find = true;
-            }
-          }
+          var new_state;
+
+          find = findMerlinOrNot(json.value);
+          
           if(find){
-            state = states[9];
+            //evil win
+            console.log("Merlin is killed!");
+            new_state = states[9];
           }else{
-          //good win
-            state = states[10];
+            //good win
+            console.log("Merlin is alive!");
+            new_state = states[10];
           }
-          console.log("find : "+find);
-          changeState();
-          socket.emit('system',{state:state,type:'endGame',author:'System'});
-          socket.broadcast.emit('system',{state:state,type:'endGame',author:'System'});
+          changeState(new_state);
+          if(show_emit) console.log("emit end game (all clients)");
+          socket.emit('system',{state:state,type:'endGame'});
+          socket.broadcast.emit('system',{state:state,type:'endGame'});
           init();
-          changeState();
+          changeState(states[0]);
           updatePlayerList();
         }
         break;
@@ -269,7 +219,7 @@ io.on('connection', function (socket) {
     obj['text']=msg;
     obj['author']=client.name;      
     obj['type']='message';
-    console.log(client.name + ' say: ' + msg);
+    //console.log(client.name + ' say: ' + msg);
     // 返回消息（可以省略）
     socket.emit('message',obj);
     // 广播向其他用户发消息
@@ -288,38 +238,23 @@ io.on('connection', function (socket) {
     };
     // 广播用户已退出
     //remove this player from player_data
-
-    for(i=0;i<player_data.length;i++){
-      if(client.id==player_data[i]['id']){
-        player_data.splice(i,1);
-      }
-    }
-    if(client.id==room_owner_id && player_data.length>0)
-      room_owner_id = player_data[0]['id'];
-    else if(client.id==room_owner_id && player_data.length==0)
-      room_owner_id = null;
+    removePlayer();
     
     socket.broadcast.emit('system',obj);
     console.log(client.name + '(' + client.id+ ') Disconnect');
-    console.log('total player number: '+player_data.length);
+    //console.log('total player number: '+player_data.length);
 
 
     if(state != "wait"){
-      state = states[0];
-      for(i=0;i<player_data.length;i++){
-        player_data[i]['ready']=false;
-        player_data[i]['role']=null;
-      }
-      changeState();
+      resetPlayerData();
+      changeState(states[0]);
     }
     if(player_data.length<5){
       //set all ready to false
-      socket.emit('system',{state:state,type:'hideReady',author:'System'});
-      socket.broadcast.emit('system',{state:state,type:'hideReady',author:'System'});
-      for(i=0;i<player_data.length;i++){
-        player_data[i]['ready']=false;
-        player_data[i]['role']=null;
-      }
+      if(show_emit) console.log("emit hide ready (all clients)");
+      socket.emit('system',{state:state,type:'hideReady'});
+      socket.broadcast.emit('system',{state:state,type:'hideReady'});
+      resetPlayerData();
     }
     //console.log(player_data);
     init();
@@ -351,18 +286,34 @@ io.on('connection', function (socket) {
     resetPlayerData();
     updateAllReadyState();
   };
+  var removePlayer=function(){
+    //remove player from player list
+    for(i=0;i<player_data.length;i++){
+      if(client.id==player_data[i]['id']){
+        player_data.splice(i,1);
+      }
+    }
+    //if the room owner disconnect, set new room owner
+    if(client.id==room_owner_id && player_data.length>0)
+      room_owner_id = player_data[0]['id'];
+    else if(client.id==room_owner_id && player_data.length==0)
+      room_owner_id = null;
+  }
   var updatePlayerList=function(){
     //update player list
-    updateObj={state:state,type:'playerList',author:'System',room_owner_id:room_owner_id};
+    updateObj={state:state,type:'playerList',room_owner_id:room_owner_id};
     updateObj['playerData']=player_data;
-    console.log(updateObj);
+    //console.log(updateObj);
+    if(show_emit) console.log("emit new player data (all clients)");
     socket.emit('system',updateObj);
     socket.broadcast.emit('system',updateObj);
   };
 
-  var changeState=function(){
-    socket.emit('system',{state:state,type:'changeState',author:'System'});
-    socket.broadcast.emit('system',{state:state,type:'changeState',author:'System'});
+  var changeState=function(new_state){
+    state = new_state;
+    if(show_emit) console.log("emit new state : "+state+" (all clients)");
+    socket.emit('system',{state:state,type:'changeState'});
+    socket.broadcast.emit('system',{state:state,type:'changeState'});
   };
   var resetPlayerData=function(){
     for(i=0;i<player_data.length;i++){
@@ -373,15 +324,65 @@ io.on('connection', function (socket) {
   };
 //--------------All states--------------//
 //--------------wait states--------------//
+  var insertPlayerData=function(name){
+    if(room_owner_id==null) room_owner_id = player_id;
+    //tell client they are join
+    if(show_emit) console.log("emit client is join (one client)");
+    socket.emit('system',{state:state,type:'join',value:true,player_id:player_id,room_owner_id:room_owner_id});
+    
+    client.name = name;
+
+    var obj = {time:getTime(),color:client.color};
+    obj['text']=client.name;
+    obj['author']='System';
+    obj['type']='welcome';
+    obj['state']=state;    
+
+
+    //add this player into player data
+    var one_player_data = {id:player_id,name:client.name,role:null,ready:false,vote:null}; //id & name & character & ready
+    client.id = one_player_data['id'];
+    client.index = player_data.length;
+    player_data.push(one_player_data);
+    player_id ++;
+    //console.log(client.name + " id="+one_player_data['id']);
+
+    //返回欢迎语
+    socket.emit('system',obj);
+    //广播新用户已登陆
+    socket.broadcast.emit('system',obj);
+
+    if(player_data.length>=5){
+      if(show_emit) console.log("emit client can show ready (all clients)");
+      socket.emit('system',{state:state,type:'ready'});
+      socket.broadcast.emit('system',{state:state,type:'ready'});
+    }
+          
+  };
+
+  var updateReadyState=function(client_state){
+    var obj={time:getTime(),color:client.color};
+    obj['author']='System';
+    obj['type']='ready';
+    obj['state']=state;
+    //console.log(client.name +" " + client_state);
+    //find the players index
+    for(i=0;i<player_data.length;i++){
+      if(client.id==player_data[i]['id'])
+        player_data[i]['ready']=client_state;
+    }
+    
+  };
   var setGoodEvil=function(){
     max_good = good_evil_count[player_data.length-5][0];
     max_evil = good_evil_count[player_data.length-5][1];
   };
   var askCharactersSet=function(){
 
-    console.log('room owner, ask characters set');
+    //console.log('room owner, ask characters set');
     updatePlayerList();
-    var ask = {type:'chooseCharactersSet',state:state,author:'System',good:max_good,evil:max_evil};
+    var ask = {type:'chooseCharactersSet',state:state,good:max_good,evil:max_evil};
+    if(show_emit) console.log('emit ask room owner '+client.name+' ('+client.id+') to set characters (one client)');
     socket.emit('system',ask);
   };
   var updateAllReadyState=function(){
@@ -391,11 +392,13 @@ io.on('connection', function (socket) {
     }
     //console.log(all_ready);
     if(all_ready){
-      socket.emit('system',{state:state,type:'allReady',author:'System',value:true});
-      socket.broadcast.emit('system',{state:state,type:'allReady',author:'System',value:true});
+      if(show_emit) console.log("emit tell all clients everyone is ready (all clients)");
+      socket.emit('system',{state:state,type:'allReady',value:true});
+      socket.broadcast.emit('system',{state:state,type:'allReady',value:true});
     }else{
-      socket.emit('system',{state:state,type:'allReady',author:'System',value:false});
-      socket.broadcast.emit('system',{state:state,type:'allReady',author:'System',value:false});
+      if(show_emit) console.log("emit tell all clients someone is not ready (all clients)");
+      socket.emit('system',{state:state,type:'allReady',value:false});
+      socket.broadcast.emit('system',{state:state,type:'allReady',value:false});
 
     }
   };
@@ -450,12 +453,13 @@ io.on('connection', function (socket) {
         }
       }
     }
-    console.log("set leader, turn: ");
-    console.log(turn);
+    //console.log("set leader, turn: ");
+    //console.log(turn);
     num_of_team = team_assignment[player_data.length-5][0][turn];
     two_fail = team_assignment[player_data.length-5][1];
-    socket.emit('system',{state:state,type:'setLeader',author:'System',leader_id:leader_id,team_size:num_of_team,two_fail:two_fail,turn:turn,vote_turn:vote_turn});
-    socket.broadcast.emit('system',{state:state,type:'setLeader',author:'System',leader_id:leader_id,team_size:num_of_team,two_fail:two_fail,turn:turn,vote_turn:vote_turn});
+    if(show_emit) console.log('emit set leader (all clients)');
+    socket.emit('system',{state:state,type:'setLeader',leader_id:leader_id,team_size:num_of_team,two_fail:two_fail,turn:turn,vote_turn:vote_turn});
+    socket.broadcast.emit('system',{state:state,type:'setLeader',leader_id:leader_id,team_size:num_of_team,two_fail:two_fail,turn:turn,vote_turn:vote_turn});
     
   };
 
@@ -468,8 +472,9 @@ io.on('connection', function (socket) {
 //--------------sendMission states--------------//
 //--------------vote states--------------//
   var voting=function(){
-    socket.emit('system',{state:state,type:'vote',author:'System',team_members:team_members});
-    socket.broadcast.emit('system',{state:state,type:'vote',author:'System',team_members:team_members});
+    if(show_emit) console.log('emit start voting (all clients)');
+    socket.emit('system',{state:state,type:'vote',team_members:team_members});
+    socket.broadcast.emit('system',{state:state,type:'vote',team_members:team_members});
   };
 
   var updateVote=function(value){
@@ -490,8 +495,7 @@ io.on('connection', function (socket) {
       if(disagree>=agree){
       //if disagree>=agree, back to sendMission state
         vote_turn++;
-        state = states[2];
-        changeState();
+        changeState(states[2]);
         setLeader();
         //update player list
         updatePlayerList();
@@ -499,8 +503,7 @@ io.on('connection', function (socket) {
       }else if(agree>disagree){
       //if agree>disagree, go to mission state
         vote_turn = 0;
-        state = states[4];
-        changeState();
+        changeState(states[4]);
         missionVote();
         updatePlayerList();
       }
@@ -510,8 +513,9 @@ io.on('connection', function (socket) {
 //--------------vote states--------------//
 //--------------mission states--------------//
   var missionVote=function(){
-    socket.emit('system',{state:state,type:'vote',author:'System',team_members:team_members});
-    socket.broadcast.emit('system',{state:state,type:'vote',author:'System',team_members:team_members}); 
+    if(show_emit) console.log('emit to do mission (all clients)');
+    socket.emit('system',{state:state,type:'vote',team_members:team_members});
+    socket.broadcast.emit('system',{state:state,type:'vote',team_members:team_members}); 
   }
   var updateMissionVote=function(value){
     var two_fail = team_assignment[player_data.length-5][1];
@@ -520,40 +524,37 @@ io.on('connection', function (socket) {
 
     if((vote_success+vote_fail)==team_members.length){
       turn++;
+      var new_state;
       if(turn==4 && two_fail){
         if(vote_fail>=2){
           //fail
-          state = states[6];
+          new_state = states[6];
           fail_time++;
 
         }else{
           //success
-          state = states[5];
+          new_state = states[5];
           success_time++;
 
         }
       }else{
         if(vote_fail>=1){
           //fail
-          state = states[6];
+          new_state = states[6];
           fail_time++;
 
         }else{
           //success
-          state = states[5];
+          new_state = states[5];
           success_time++;
 
         }
       }
-      //console.log(turn);
-      //console.log(success_time);
-      //console.log(fail_time);
-      //console.log(state);
-      changeState();
-      socket.emit('system',{state:state,type:'update',author:'System',detail:[vote_success,vote_fail,success_time,fail_time]});
-      socket.broadcast.emit('system',{state:state,type:'update',author:'System',detail:[vote_success,vote_fail,success_time,fail_time]}); 
-      state = states[7];
-      changeState();
+      changeState(new_state);
+      if(show_emit) console.log('emit to update new game details (all clients)');
+      socket.emit('system',{state:state,type:'update',detail:[vote_success,vote_fail,success_time,fail_time]});
+      socket.broadcast.emit('system',{state:state,type:'update',detail:[vote_success,vote_fail,success_time,fail_time]}); 
+      changeState(states[7]);
       updateGame();
     }
 
@@ -562,37 +563,46 @@ io.on('connection', function (socket) {
 //--------------mission states--------------//
 //--------------update states--------------//
 var updateGame=function(){
-  //console.log(turn);
-  //console.log(vote_turn);
   vote_success = 0;
   vote_fail = 0;
   if(fail_time>=3){//Evil win
-    state = states[9];
-    changeState();
-    socket.emit('system',{state:state,type:'endGame',author:'System'});
-    socket.broadcast.emit('system',{state:state,type:'endGame',author:'System'});
+    changeState(states[9]);
+    if(show_emit) console.log('emit end game (all clients)');
+    socket.emit('system',{state:state,type:'endGame'});
+    socket.broadcast.emit('system',{state:state,type:'endGame'});
     init();
-    changeState();
+    changeState(states[0]);
   }else if(success_time>=3){//go into find merlin
-    state = states[8];
-    changeState();
+    changeState(states[8]);
     var kill_list = [];
     for(i=0;i<player_data.length;i++){
       if(player_data[i]['role'][1]=='Good'){
         kill_list.push([player_data[i]['id'], player_data[i]['name']]);
       }
     }
-    console.log(kill_list);
+    //console.log(kill_list);
+    if(show_emit) console.log('emit kill Merlin and kill list (all clients)');
     socket.emit('system',{state:state,type:'kill',kill_list:kill_list});
     socket.broadcast.emit('system',{state:state,type:'kill',kill_list:kill_list});
   }else{
-    state = states[2];
-    changeState();
+    changeState(states[2]);
     setLeader();
   }
   updatePlayerList();
 }
 //--------------update states--------------//
+//--------------findMerlin states--------------//
+var findMerlinOrNot=function(id){
+  for(i=0;i<player_data.length;i++){
+    if(player_data[i]['id']==id && player_data[i]['role'][0]=="Merlin"){
+      //evil win
+      return true;
+    }
+  }
+  return false;
+}
+//--------------findMerlin states--------------//
+
 
 //--------------Function to use here--------------//
 
@@ -641,8 +651,18 @@ var getTime=function(){
 }
 
 var getColor=function(){
-  var colors = ['aliceblue','antiquewhite','aqua','aquamarine','pink','red','green',
-                'orange','blue','blueviolet','brown','burlywood','cadetblue'];
-  return colors[Math.round(Math.random() * 10000 % colors.length)];
+  //var colors = ['aliceblue','antiquewhite','aqua','aquamarine','pink','red','green','orange','blue','blueviolet','brown','burlywood','cadetblue'];
+  //return colors[Math.round(Math.random() * 10000 % colors.length)];
+  var letters = '0123456789ABCDEF';
+  var color = '#';
+  for (var i = 0; i < 6; i++ ) {
+    if(i%2==0){
+      color += letters[Math.floor(Math.random() * 10)+6];
+    }else{
+      color += letters[Math.floor(Math.random() * 16)];
+    }
+  }
+  //console.log(color);
+  return color;
 }
 //----------------------------------------------------------------------//

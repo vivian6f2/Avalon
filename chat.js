@@ -62,11 +62,14 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
                     myName = false;
                     join_game = false;
                 }else if(json.type == 'ready' && join_game){
+                    //show the ready button
                     $('.wait #readyButton').css('display','initial');
                 }else if(json.type =='hideReady' && join_game){
+                    //hide the ready button
                     $('.wait #readyButton').css('display','none');
                     $('.wait #readyButton').html('ready');
                 }else if(json.type == 'allReady' && join_game){
+                    //all ready, show the play button for room owner
                     if(room_owner_id==player_id && json.value){
                         $('.wait #playButton').css('display','initial');
                         $('.wait #playButton').html('play');
@@ -75,6 +78,7 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
                         $('.wait #playButton').html('play');
                     }
                 }else if(json.type == 'join'){
+                    //known this player is joined, add needed value
                     join_game = json.value;
                     player_id = json.player_id;
                     room_owner_id = json.room_owner_id;
@@ -84,6 +88,7 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
                 $('.randomCharacters').css('display','none');
                 if(json.type == 'chooseCharactersSet'){
                     //alert(room_owner_id + " " + player_id);
+                    //show choose character form for room owner
                     if(room_owner_id==player_id){
                         $('.randomCharacters').css('display','initial');
                         $('.randomCharacters #charactersInformation').html('There are '+json.good+' good and '+json.evil+' evil.<br>Choose characters you want to add:');
@@ -98,11 +103,12 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
                 break;
             case "sendMission":
                 if(json.type == 'setLeader'){
+                    //set leader and if this player is leader, show choose members form
                     $('.gameDetails').css('display','initial');
                     leader_id = json.leader_id;
                     team_size = json.team_size;
                     $('#turn').html('Round '+(json.turn+1));
-                    $('#vote_turn').html('Vote '+(json.vote_turn+1)+' times');
+                    $('#vote_turn').html('Vote '+(json.vote_turn)+' times');
                     if(json.two_fail&&json.turn==3){
                         $('#two_fail').html("Need two fail this time");
                     }else{
@@ -118,13 +124,14 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
                 break;
             case "vote":
                 if(json.type == 'vote'){
+                    //show team members and vote form
                     team_members = json.team_members;
                     voteForm();
                 }
                 break;
             case "mission":
                 if(json.type == 'vote'){
-                    //check if this player is in the team members
+                    //check if this player is in the team members, show success and fail button
                     team_members = json.team_members;
                     $('.mission').css('display','initial');
                     var to_vote = false;
@@ -146,21 +153,25 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
                 break;
             case "missionSuccess":
                 if(json.type == 'update'){
+                    //update game detail
                     $('.update').css('display','initial');
                     var inner_span = "<span>Mission success</span><br>";
                     $('.update').html(inner_span);
                     $('#success_time').html("Success : "+ json.detail[2]);
                     $('#fail_time').html("Fail : "+ json.detail[3]);
+                    $('#lastMissionResult').html('Last mission: '+json.detail[0]+' success,'+json.detail[1]+' fail');
                 }
                 break;
             case "missionFail":
                 if(json.type == 'update'){
+                    //update game detail
                     $('.update').css('display','initial');
                     var inner_span = "<span>Mission fail</span><br>";
                     inner_span += json.detail[0] + " success " + json.detail[1] + " fail";
                     $('.update').html(inner_span);
                     $('#success_time').html("Success : "+json.detail[2]);
                     $('#fail_time').html("Fail : "+json.detail[3]);
+                    $('#lastMissionResult').html('Last mission: '+json.detail[0]+' success,'+json.detail[1]+' fail');
                 }
 
                 break;
@@ -168,7 +179,7 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
                 break;
             case "findMerlin":
                 if(json.type == 'kill'){
-                    //check if this player is assassin
+                    //check if this player is assassin, show find merlin form
                     var is_assassin = false;
                     for(i=0;i<player_data.length;i++){
                         if(player_data[i].id==player_id && player_data[i].role[0]=='Assassin'){
@@ -182,12 +193,14 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
                 break;
             case "evilWin":
                 if(json.type == 'endGame'){
+                    //show last game winner
                     $('#lastGameWinner').html('Evil Wins!');
 
                 }
                 break;
             case "goodWin":
                 if(json.type == 'endGame'){
+                    //show last game winner
                     $('#lastGameWinner').html('Good Wins!');
 
                 }
@@ -202,7 +215,7 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
             p = '<p style="background:'+json.color+'">system  @ '+ json.time+ ' : Bye ' + json.text +'</p>';
 
         }else if(json.type=='playerList'){
-            console.log(json.playerData);
+            //update player list
             inner_li = '';
             playerList.html('');
             //update room owner
@@ -274,6 +287,7 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
             player_data = json.playerData;
             
         }else if(json.type=='changeState'){
+            //update state
             stateDisplay.html('state : '+json.state);
             for(i=0;i<states.length;i++){
                 if(states[i]!=json.state){
@@ -305,6 +319,7 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
         $('#two_fail').html("");
         $('#success_time').html("");
         $('#fail_time').html("");
+        $('#lastMissionResult').html('');
         leader_id = null;
         player_role = null;
 
@@ -398,7 +413,7 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
         $('.findMerlin').css('display','none');
         var obj = {type:'find'};
         obj['value'] = $('#selectMerlin').val();
-        socket.emit('player',obj);
+        socket.emit('player',obj); //state = findMerlin
     });
 //--------------findMerlin state--------------//
 //--------------mission state--------------//
@@ -406,14 +421,14 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
         $('.mission #successButton').css('display','none');
         $('.mission #failButton').css('display','none');
         var obj = {type:'vote',value:true};
-        socket.emit('player',obj);
+        socket.emit('player',obj); //state = mission
     });
 
     $('.mission').on('click', '#failButton', function(){
         $('.mission #successButton').css('display','none');
         $('.mission #failButton').css('display','none');
         var obj = {type:'vote',value:false};
-        socket.emit('player',obj);
+        socket.emit('player',obj); //state = mission
     });
 
 //--------------mission state--------------//
@@ -421,13 +436,13 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
     $('.vote').on('click', '#voteAgreeButton', function(){
         $('.vote').css('display','none');
         var obj = {type:'vote',value:true};
-        socket.emit('player',obj);
+        socket.emit('player',obj); //state = vote
     });
 
     $('.vote').on('click', '#voteDisagreeButton', function(){
         $('.vote').css('display','none');
         var obj = {type:'vote',value:false};
-        socket.emit('player',obj);
+        socket.emit('player',obj); //state = vote
 
     });
 //--------------vote state--------------//
@@ -447,7 +462,7 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
             $('.sendMission').css('display','none');
             var obj = {type:'ready'};
             obj['team_members'] = team_members;
-            socket.emit('player',obj);
+            socket.emit('player',obj); //state = sendMission
         }
     })
 //--------------sendMission state--------------//
@@ -479,7 +494,7 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
         var obj = {type:'ready'};
         obj['good_characters'] = good_characters;
         obj['evil_characters'] = evil_characters;
-        socket.emit('player',obj);
+        socket.emit('player',obj); //state = randomCharacters
     });
 //--------------randomCharacters state--------------//
  
@@ -488,7 +503,7 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
     $('.wait #playButton').click(function(){
         if($('.wait #playButton').html()=='play'){
             $('.wait #playButton').html('not yet');
-            socket.emit('player',{value:'play',type:'playButton'});
+            socket.emit('player',{type:'playButton'}); //state = wait
         }
         else if($('.wait #playButton').html()=='not yet'){
             $('.wait #playButton').html('play');
@@ -498,11 +513,11 @@ $(function () { //$(document).ready(function() { ... }); it means that when docu
     $('.wait #readyButton').click(function(){
         if($('.wait #readyButton').html()=='ready'){
             $('.wait #readyButton').html('not yet');
-            socket.emit('player',{value:'ready',type:'readyButton'});
+            socket.emit('player',{value:true,type:'readyButton'}); //state = wait
         }
         else if($('.wait #readyButton').html()=='not yet'){
             $('.wait #readyButton').html('ready');
-            socket.emit('player',{value:'notyet',type:'readyButton'});
+            socket.emit('player',{value:false,type:'readyButton'}); //state = wait
         }
  
     });
